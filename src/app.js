@@ -349,7 +349,7 @@ let cache = { byDept: [], accountsByDept: new Map() };
     cache = await loadData();
 
     drillTo({
-      title: "Departments — 2025–2026 Approved",
+      title: "2025–2026 Approved",
       data: viewDepartments(true),
       kind: "departments"
     });
