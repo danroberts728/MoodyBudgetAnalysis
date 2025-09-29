@@ -352,8 +352,8 @@ texts.merge(enter)
 
 function resize() {
   const box = root.node().getBoundingClientRect();
-  const W = Math.max(280, Math.round(box.width));       // never smaller than 280
-  const H = Math.max(360, Math.round(W * 0.62));        // keep nice aspect ratio
+  let W = Math.max(280, Math.round(box.width));       // never smaller than 280
+  let H = Math.max(360, Math.round(W * 0.62));        // keep nice aspect ratio
 
   width = W;
   height = H;
