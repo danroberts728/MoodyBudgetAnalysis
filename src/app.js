@@ -147,7 +147,7 @@ async function loadData() {
   const clean = rows.map((r, i) => ({
     id: `row-${i}`,
     dept: String(r[deptKey] || "").trim(),
-    account: String(r[acctKey] || "").trim(),
+    account: String(r[acctKey] || "").trim().replace("City of Moody", ""),
     approved: parseNumber(r[approvedKey])
   })).filter(d => d.dept && d.account && d.approved > 0);
 
