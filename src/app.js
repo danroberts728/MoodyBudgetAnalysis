@@ -94,8 +94,8 @@ const svg = root
 const chartG = svg
   .append("g");
 
-const arc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius);
-const arcHover = d3.arc().innerRadius(radius * 0.52).outerRadius(radius * 1.03);
+let arc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius);
+let arcHover = d3.arc().innerRadius(radius * 0.52).outerRadius(radius * 1.03);
 
 const pie = d3
   .pie()
