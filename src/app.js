@@ -80,9 +80,9 @@ function withOtherBucket(items, threshold = 0.05) {
 // ----------------------------------------------
 const root = d3.select("#app").style("position", "relative");
 
-const width = 900;
-const height = 560;
-const radius = Math.min(width, height) / 2 - 10;
+let width = 900;
+let height = 560;
+let radius = Math.min(width, height) / 2 - 10;
 
 const svg = root
   .append("svg")
