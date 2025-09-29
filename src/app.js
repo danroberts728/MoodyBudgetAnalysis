@@ -315,27 +315,37 @@ function renderPie(items, title = "") {
 
   // Labels
   const texts = chartG.selectAll("text.slice-label").data(arcs, d => d.data.id);
-  texts.enter()
-    .append("text")
-    .attr("class", "slice-label")
-    .attr("dy", "0.35em")
-    .attr("pointer-events", "none")
-    .merge(texts)
-    .transition().duration(450)
-    .attrTween("transform", function (d) {
-      const i = d3.interpolate(this._pos || d, d);
-      this._pos = i(0);
-      return t => {
-        const a = arc.centroid(i(t));
-        return `translate(${a[0]},${a[1]})`;
-      };
-    })
-    .tween("text", function (d) {
-      // Only show label if slice is big enough
-      const pct = total ? d.data.value / total : 0;
-      const label = pct >= 0.04 ? d.data.name : ""; // ~4% cutoff for label text
-      d3.select(this).text(label);
-    });
+
+const enter = texts.enter()
+  .append("text")
+  .attr("class", "slice-label")
+  .attr("text-anchor", "middle")
+  .attr("pointer-events", "none");
+
+enter.append("tspan").attr("class", "label-name").attr("x", 0).attr("dy", "-0.2em");
+enter.append("tspan").attr("class", "label-value").attr("x", 0).attr("dy", "1.2em");
+
+texts.merge(enter)
+  .transition().duration(450)
+  .attrTween("transform", function (d) {
+    const i = d3.interpolate(this._pos || d, d);
+    this._pos = i(0);
+    return t => {
+      const a = arc.centroid(i(t));
+      return `translate(${a[0]},${a[1]})`;
+    };
+  })
+  .on("end", function (d) {
+    const pct = total ? d.data.value / total : 0;
+    const g = d3.select(this);
+    if (pct >= 0.04) {
+      g.select("tspan.label-name").text(d.data.name);
+      g.select("tspan.label-value").text(fmtCurrency(d.data.value));
+    } else {
+      g.select("tspan.label-name").text("");
+      g.select("tspan.label-value").text("");
+    }
+  });
 
   texts.exit().remove();
 }

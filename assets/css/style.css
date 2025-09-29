@@ -48,10 +48,16 @@
 }
 
 .slice-label {
-  font-size: 12px;
+  font-size: clamp(10px, 2.5vw, 12px);
   text-anchor: middle;
   fill: #111827;
+  font-weight: 600;
+}
+
+.slice-label .label-value {
+  font-size: 0.85em;
   font-weight: 500;
+  fill: #374151; /* muted dark gray */
 }
 
 .mb-center {
