@@ -88,11 +88,11 @@ const svg = root
   .append("svg")
   .attr("viewBox", `0 0 ${width} ${height}`)
   .attr("width", "100%")
-  .attr("height", "100%");
+  .attr("height", "100%")
+  .attr("preserveAspectRatio", "xMidYMid meet");;
 
 const chartG = svg
-  .append("g")
-  .attr("transform", `translate(${width / 2}, ${height / 2})`);
+  .append("g");
 
 const arc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius);
 const arcHover = d3.arc().innerRadius(radius * 0.52).outerRadius(radius * 1.03);
@@ -241,6 +241,7 @@ function expandOther(container) {
 // ----------------------------------------------
 function renderPie(items, title = "") {
   const total = d3.sum(items, d => d.value);
+  
   center.text(total > 0 ? `${title}\n${fmtCurrency(total)}` : title);
 
   const arcs = pie(items);
@@ -263,8 +264,8 @@ function renderPie(items, title = "") {
         `);
     })
     .on("mousemove", function (event) {
-      tip.style("left", (event.offsetX + 16) + "px")
-         .style("top", (event.offsetY + 16) + "px");
+      tip.style("left", (event.pageX + 12) + "px")
+         .style("top", (event.pageY + 12) + "px");
     })
     .on("mouseleave", function () {
       d3.select(this).transition().duration(150).attr("d", arc);
@@ -339,6 +340,25 @@ function renderPie(items, title = "") {
   texts.exit().remove();
 }
 
+function resize() {
+  const box = root.node().getBoundingClientRect();
+  const W = Math.max(280, Math.round(box.width));       // never smaller than 280
+  const H = Math.max(360, Math.round(W * 0.62));        // keep nice aspect ratio
+
+  width = W;
+  height = H;
+  radius = Math.min(width, height) / 2 - 10;
+
+  svg.attr("viewBox", `0 0 ${width} ${height}`);
+  chartG.attr("transform", `translate(${width / 2}, ${height / 2})`);
+
+  arc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius);
+  arcHover = d3.arc().innerRadius(radius * 0.52).outerRadius(radius * 1.03);
+
+  // Re-render current view with new geometry
+  if (state.current) renderPie(state.current.data, state.current.title);
+}
+
 // ----------------------------------------------
 // Boot
 // ----------------------------------------------
@@ -348,6 +368,7 @@ let cache = { byDept: [], accountsByDept: new Map() };
   try {
     cache = await loadData();
 
+    resize();
     drillTo({
       title: "2025–2026 Approved",
       data: viewDepartments(true),

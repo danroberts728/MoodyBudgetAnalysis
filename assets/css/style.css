@@ -7,8 +7,8 @@
 
 #app {
   max-width: 1100px;
-  margin: 24px auto 40px;
-  padding: 12px 16px 32px;
+  margin: 16px auto 32px;
+  padding: 12px 12px 24px;
   background: var(--bg);
   border-radius: 16px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.06);
@@ -18,7 +18,9 @@
 
 .mb-breadcrumb {
   margin: 4px 0 8px 0;
-  font-size: 14px;
+  font-size: clamp(12px, 2.9vw, 14px);
+  line-height: 1.25;
+  word-break: break-word;
   color: var(--muted);
   user-select: none;
 }
@@ -28,14 +30,14 @@
 
 .mb-back {
   position: absolute;
-  top: 10px;
-  left: 10px;
+  top: 8px;
+  left: 8px;
   background: var(--chip);
   border: 0;
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-radius: 10px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: clamp(12px, 2.9vw, 14px);
 }
 .mb-back:hover { filter: brightness(0.97); }
 
@@ -53,7 +55,8 @@
 }
 
 .mb-center {
-  font-size: 14px;
+  font-size: clamp(10px, 2.7vw, 13px);
+  font-weight: 600;
   fill: var(--muted);
   white-space: pre-line; /* allow \n */
 }
@@ -64,9 +67,19 @@
   background: rgba(17, 24, 39, 0.95);
   color: white;
   padding: 8px 10px;
-  font-size: 13px;
-  border-radius: 8px;
+  font-size: clamp(12px, 2.9vw, 14px);
+  border-radius: 10px;
   box-shadow: 0 6px 18px rgba(0,0,0,0.2);
 }
 .mb-tip-title { font-weight: 600; margin-bottom: 4px; }
 .mb-tip-pct { opacity: 0.8; }
+
+/* Tighten the card on very small screens */
+@media (max-width: 480px) {
+  #app {
+    margin: 8px auto 16px;
+    padding: 10px;
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+  }
+}
