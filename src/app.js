@@ -8,7 +8,8 @@
  *   items it contains (and from there you can drill further if needed).
  */
 
-const DEFAULT_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRRtJHPNjRvv_DT0suQ4u-Z4yHKa-cwkkACS-l_QmJrPm7uuAnTUmN7xdwISa7iAEJfuuVrTEjY1xkV/pub?output=tsv";
+const DEFAULT_DATA_URL_START = "https://docs.google.com/spreadsheets/d/e/";
+const DEFAULT_DATA_URL = DEFAULT_DATA_URL_START + "2PACX-1vRRtJHPNjRvv_DT0suQ4u-Z4yHKa-cwkkACS-l_QmJrPm7uuAnTUmN7xdwISa7iAEJfuuVrTEjY1xkV/pub?output=tsv";
 
 // ----------------------------------------------
 // Helpers
@@ -144,8 +145,14 @@ async function loadData() {
   }
   
   let fetch_url = DEFAULT_DATA_URL;
-  if("data_url" in $_GET) {
-    fetch_url = $_GET['data_url'];
+  if("doc_id" in $_GET) {
+    fetch_url = DEFAULT_DATA_URL_START + $_GET['doc_id'];
+  }
+  if("gid" in $_GET) {
+    fetch_url += "&" + $_GET["gid"] + "&single=true";
+  }
+  if(fetch_url != DEFAULT_DATA_URL) {
+    fetch_url += "&output=csv";
   }
 
   const tsv = await fetch(fetch_url).then(r => r.text());
