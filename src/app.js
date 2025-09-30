@@ -149,7 +149,7 @@ async function loadData() {
     fetch_url = DEFAULT_DATA_URL_START + $_GET['doc_id'] + "/pub?";
   }
   if("gid" in $_GET) {
-    fetch_url += "&" + $_GET["gid"] + "&single=true";
+    fetch_url += "&gid=" + $_GET["gid"] + "&single=true";
   }
   if(fetch_url != DEFAULT_DATA_URL) {
     fetch_url += "&output=tsv";
