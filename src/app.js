@@ -152,7 +152,7 @@ async function loadData() {
     fetch_url += "&" + $_GET["gid"] + "&single=true";
   }
   if(fetch_url != DEFAULT_DATA_URL) {
-    fetch_url += "&output=csv";
+    fetch_url += "&output=tsv";
   }
 
   const tsv = await fetch(fetch_url).then(r => r.text());
