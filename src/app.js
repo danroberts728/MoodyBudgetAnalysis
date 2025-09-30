@@ -8,7 +8,7 @@
  *   items it contains (and from there you can drill further if needed).
  */
 
-const DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRRtJHPNjRvv_DT0suQ4u-Z4yHKa-cwkkACS-l_QmJrPm7uuAnTUmN7xdwISa7iAEJfuuVrTEjY1xkV/pub?output=tsv";
+const DEFAULT_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRRtJHPNjRvv_DT0suQ4u-Z4yHKa-cwkkACS-l_QmJrPm7uuAnTUmN7xdwISa7iAEJfuuVrTEjY1xkV/pub?output=tsv";
 
 // ----------------------------------------------
 // Helpers
@@ -130,7 +130,25 @@ const backBtn = root.append("button")
 // Data prep
 // ----------------------------------------------
 async function loadData() {
-  const tsv = await fetch(DATA_URL).then(r => r.text());
+  var $_GET = {};
+  if(document.location.toString().indexOf('?' !== -1)) {
+    var query = document.location
+        .toString()
+        .replace(/^.*?\?/, '')
+        .replace(/#.*$/, '')
+        .split('&');
+    for(var i=0, l=query.length; i<l; i++) {
+       var aux = decodeURIComponent(query[i]).split('=');
+       $_GET[aux[0]] = aux[1];
+    }
+  }
+  
+  let fetch_url = DEFAULT_DATA_URL;
+  if("data_url" in $_GET) {
+    fetch_url = $_GET['data_url'];
+  }
+
+  const tsv = await fetch(fetch_url).then(r => r.text());
   const rows = d3.tsvParse(tsv);
 
   // Column detection
