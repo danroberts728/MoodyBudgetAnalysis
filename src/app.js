@@ -146,7 +146,7 @@ async function loadData() {
   
   let fetch_url = DEFAULT_DATA_URL;
   if("doc_id" in $_GET) {
-    fetch_url = DEFAULT_DATA_URL_START + $_GET['doc_id'];
+    fetch_url = DEFAULT_DATA_URL_START + $_GET['doc_id'] + "/pub?";
   }
   if("gid" in $_GET) {
     fetch_url += "&" + $_GET["gid"] + "&single=true";
