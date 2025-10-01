@@ -1,17 +1,63 @@
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Moody, Alabama 2025-2026 Budget</title>
-        <style>
-            /* Add your CSS styles here */
-        </style>
-    </head>
-    <body>
-        <link rel="stylesheet" href="./assets/css/style.css" />
-        <div id="app"></div>
-        <script src="https://d3js.org/d3.v7.min.js"></script> <!-- If using CDN -->
-        <script src="./src/app.js"></script>
-    </body>
-    </html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"
+  />
+  <title>Moody Budget • Sankey → Pie (TSV)</title>
+
+  <!-- D3 & plugins -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+
+  <link rel="stylesheet" href="./assets/css/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1 class="app-title">Moody Budget</h1>
+    <div class="controls">
+      <button id="backBtn" class="btn hidden" aria-label="Back to Sankey">← Back</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <!-- Sankey container -->
+    <section id="sankeyView" class="view">
+      <div class="chart-wrap">
+        <svg id="sankeySvg" role="img" aria-label="Sankey showing revenue to expenses"></svg>
+      </div>
+      <div class="legend" id="sankeyLegend"></div>
+      <div id="tapHint" class="hint">Tip: nodes with multiple departments are tappable.</div>
+    </section>
+
+    <!-- Pie container -->
+    <section id="pieView" class="view hidden">
+      <div class="view-header">
+        <h2 id="pieTitle">Department</h2>
+        <div class="subhead" id="pieSubhead"></div>
+      </div>
+      <div class="chart-wrap">
+        <svg id="pieSvg" role="img" aria-label="Department pie chart"></svg>
+      </div>
+      <div class="legend" id="pieLegend"></div>
+    </section>
+  </main>
+
+  <!-- Bottom-sheet chooser when a Budget has 2+ departments -->
+  <div id="chooser" class="chooser hidden" role="dialog" aria-modal="true" aria-labelledby="chooserTitle">
+    <div class="chooser-card">
+      <h3 id="chooserTitle">Choose a Department</h3>
+      <ul id="chooserList" class="chooser-list"></ul>
+      <button id="chooserClose" class="btn btn-secondary">Cancel</button>
+    </div>
+  </div>
+
+  <footer class="app-footer">
+    <small>Data: Google Sheet (TSV). Visualization: D3</small>
+  </footer>
+
+  <script src="./src/app.js"></script>
+</body>
+</html>
