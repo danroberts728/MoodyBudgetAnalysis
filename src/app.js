@@ -13,6 +13,7 @@
 const TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRRtJHPNjRvv_DT0suQ4u-Z4yHKa-cwkkACS-l_QmJrPm7uuAnTUmN7xdwISa7iAEJfuuVrTEjY1xkV/pub?gid=0&single=true&output=tsv";
 // Labels/leader lines should be based on the visible pie
 const LABEL_MIN_PCT = 0.08; // 8% — show on-slice label if >= 8%, else leader line
+const THRESHOLD_FOR_OTHER = 3;
 
 /* DOM */
 const tableView = d3.select("#tableView");
@@ -245,8 +246,8 @@ function groupStrictFivePct(items){
   const asc = [...items].sort((a,b)=>d3.ascending(a.value, b.value));
 
   // Take all <5%
-  let smalls = asc.filter(d => pct(d.value) < 4);
-  let remaining = asc.filter(d => pct(d.value) >= 4);
+  let smalls = asc.filter(d => pct(d.value) < THRESHOLD_FOR_OTHER);
+  let remaining = asc.filter(d => pct(d.value) >= THRESHOLD_FOR_OTHER);
 
   // If nothing to group, return original
   if (smalls.length === 0) return items;
@@ -254,7 +255,7 @@ function groupStrictFivePct(items){
   let otherValue = d3.sum(smalls, d=>d.value);
 
   // Ensure "Other" itself is ≥5% (and avoid consuming everything)
-  while ((otherValue/total)*100 < 4 && remaining.length > 0) {
+  while ((otherValue/total)*100 < THRESHOLD_FOR_OTHER && remaining.length > 0) {
     const next = remaining.shift(); // smallest of the remaining
     smalls.push(next);
     otherValue += next.value;
