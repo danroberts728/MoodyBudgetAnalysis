@@ -787,7 +787,7 @@ function renderPie(allItems, {
 
 // Legend (first 10 after grouping) — show name + dollars; flag "Other"
 // Legend (top 10 after grouping) — clickable; largest → smallest; "Other" flagged
-baseItems.slice(0,10).forEach(it => {
+baseItems.slice(0,100).forEach(it => {
   const isOther = it.account === "Other";
   const d = arcByAccount.get(it.account); // corresponding arc datum
 
