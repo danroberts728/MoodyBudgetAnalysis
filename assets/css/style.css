@@ -125,7 +125,7 @@ tbody .col-total{font-variant-numeric:tabular-nums}
 .more-btn{
   display:inline-flex;align-items:center;gap:6px;
   margin-left:8px;padding:6px 10px;border-radius:999px;
-  border:1px solid #263449;background:#1a2332;color:var(--ink);
+  border:1px solid #6366f1;background:#6366f1;color:var(--ink);
   font-size:12px;line-height:1;cursor:pointer;
   transition:transform .06s ease, background .2s ease;
 }

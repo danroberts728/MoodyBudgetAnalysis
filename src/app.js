@@ -372,7 +372,7 @@ function renderBudgetTable(){
         tdBudget.append("button")
           .attr("class","more-btn")
           .attr("type","button")
-          .text("More")
+          .text("More ▸")
           .on("click", (e) => {
             e.stopPropagation();
             showDeptPieForBudget(sectionLabel, row.budget);
