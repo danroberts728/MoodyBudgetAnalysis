@@ -11,6 +11,8 @@
  */
 
 const TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRRtJHPNjRvv_DT0suQ4u-Z4yHKa-cwkkACS-l_QmJrPm7uuAnTUmN7xdwISa7iAEJfuuVrTEjY1xkV/pub?gid=0&single=true&output=tsv";
+// Labels/leader lines should be based on the visible pie
+const LABEL_MIN_PCT = 0.08; // 8% — show on-slice label if >= 8%, else leader line
 
 /* DOM */
 const tableView = d3.select("#tableView");
@@ -548,6 +550,7 @@ function renderPie(allItems, {
   const localTotal = d3.sum(baseItems, d=>d.value) || 1;
   const denom = (rootTotal ?? localTotal); // fixed denominator when provided
   const percentOfRoot = v => (v/denom) * 100;
+  const pctVisible = v => v / localTotal;  // returns 0..1
 
   const color = d3.scaleOrdinal()
     .domain(baseItems.map(d=>d.account))
@@ -660,11 +663,11 @@ function renderPie(allItems, {
   // Show labels if slice ≥7% OR among top 8 by value
   const ranked = [...arcs].sort((a,b)=>d3.descending(a.data.value,b.data.value));
   const cutoffVal = ranked[Math.min(7, ranked.length-1)]?.data?.value ?? Infinity;
-  const labelArcs = arcs.filter(a => percentOfRoot(a.data.value) >= 7 || a.data.value >= cutoffVal);
+  const labelArcs = arcs.filter(a => pctVisible(a.data.value) >= 0.07 || a.data.value >= cutoffVal);
 
-  // Split into "big" (≥8%) vs "small" (<8%) for leader policy
-  const bigArcs   = labelArcs.filter(a => percentOfRoot(a.data.value) >= 8);
-  const smallArcs = labelArcs.filter(a => percentOfRoot(a.data.value) < 8);
+  // Base ON-SLICE vs LEADER on the visible pie % (LABEL_MIN_PCT = 0.08 at top of file)
+    const bigArcs   = labelArcs.filter(a => pctVisible(a.data.value) >= LABEL_MIN_PCT);
+    const smallArcs = labelArcs.filter(a => pctVisible(a.data.value) <  LABEL_MIN_PCT);
 
   const labelG = g.append("g");
 
