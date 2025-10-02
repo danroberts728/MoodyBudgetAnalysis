@@ -1,17 +1,60 @@
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Moody, Alabama 2025-2026 Budget</title>
-        <style>
-            /* Add your CSS styles here */
-        </style>
-    </head>
-    <body>
-        <link rel="stylesheet" href="./assets/css/style.css" />
-        <div id="app"></div>
-        <script src="https://d3js.org/d3.v7.min.js"></script> <!-- If using CDN -->
-        <script src="./src/app.js"></script>
-    </body>
-    </html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"
+  />
+  <title>Moody Budget • Table → Pie</title>
+
+  <!-- D3 -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+
+  <link rel="stylesheet" href="./assets/css/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1 class="app-title">Moody Budget</h1>
+    <div class="controls">
+      <button id="backBtn" class="btn hidden" aria-label="Back">← Back</button>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <!-- Table view -->
+    <section id="tableView" class="view">
+      <div class="table-wrap">
+        <table id="budgetTable" class="table">
+          <thead>
+            <tr>
+              <th class="col-budget"></th>
+              <th class="col-total">2025-2026 Budget</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+      <div class="hint">Use "More" button to drill down to pie chart</div>
+    </section>
+
+    <!-- Pie view (replaces table when active) -->
+    <section id="pieView" class="view hidden">
+      <div class="view-header">
+        <h2 id="pieTitle">Title</h2>
+        <div class="subhead" id="pieSubhead"></div>
+      </div>
+      <div class="chart-wrap">
+        <svg id="pieSvg" role="img" aria-label="Pie chart"></svg>
+      </div>
+      <div class="legend" id="pieLegend"></div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <small>Copyright &copy; 2025 Dan Roberts</small>
+  </footer>
+
+  <script src="./src/app.js"></script>
+</body>
+</html>

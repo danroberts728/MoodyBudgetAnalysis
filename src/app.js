@@ -1,422 +1,845 @@
-/* globals d3 */
-/**
- * Drillable pie for Moody Budget
- * Level 0: Departments (sum of 2025-2026 Approved per department)
- * Level 1: Accounts within a department
- * “Other” bucket: If the sum of the smallest 2+ slices < 5% of total,
- *   aggregate them into an “Other” slice. Clicking “Other” reveals the
- *   items it contains (and from there you can drill further if needed).
+/* Moody Budget • Table → Dept Pie → Accounts Pie (TSV, phone-first)
+ * Features:
+ * - Table with totals at bottom of sections, "More" button only if >1 accounts
+ * - Pie hover zoom + tooltip (percent of ROOT total)
+ * - Strict 5% rule: no slice <5%; combine <5% into "Other" (expandable)
+ * - "Other" visually distinct (hatch, glow, pointer, legend hint, keyboard)
+ * - Big slices (≥8%) show on-slice labels (title + $); small slices use leaders
+ * - Small labels clamped into in-bounds columns with wrapping/dodging
+ * - Center text shows fixed root total + label
+ * - Percent denominator stays fixed when drilling into "Other"
  */
 
-const DEFAULT_DATA_URL_START = "https://docs.google.com/spreadsheets/d/e/";
-const DEFAULT_DATA_URL = DEFAULT_DATA_URL_START + "2PACX-1vRRtJHPNjRvv_DT0suQ4u-Z4yHKa-cwkkACS-l_QmJrPm7uuAnTUmN7xdwISa7iAEJfuuVrTEjY1xkV/pub?gid=948065768&single=true&output=tsv";
+const TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRRtJHPNjRvv_DT0suQ4u-Z4yHKa-cwkkACS-l_QmJrPm7uuAnTUmN7xdwISa7iAEJfuuVrTEjY1xkV/pub?gid=0&single=true&output=tsv";
 
-// ----------------------------------------------
-// Helpers
-// ----------------------------------------------
-const fmtCurrency = d3.format("$,");
-const fmtPct = d3.format(".1%");
+/* DOM */
+const tableView = d3.select("#tableView");
+const tableBody = d3.select("#tableBody");
+const pieView = d3.select("#pieView");
+const pieSvg = d3.select("#pieSvg");
+const pieLegend = d3.select("#pieLegend");
+const pieTitle = d3.select("#pieTitle");
+const pieSubhead = d3.select("#pieSubhead");
+const backBtn = d3.select("#backBtn");
 
-// Be generous with header names; normalize to lower+no spaces
-const norm = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+function setViewBox(svg, w, h){ svg.attr("viewBox", `0 0 ${w} ${h}`); }
+const fmt0 = d3.format(",.0f");
+const fmt1 = d3.format(".1f");
+const fmtMoney0 = d3.format("$,.0f"); // $1,234,567
+const dollars = x => `$${fmt0(x)}`;
 
-function firstKey(obj, keys) {
-  const wanted = keys.map(norm);
-  for (const k of Object.keys(obj)) {
-    if (wanted.includes(norm(k))) return k;
+// Tooltip (single instance)
+const tip = d3.select("body").append("div")
+  .attr("class", "mb-tip hidden")
+  .attr("role", "tooltip");
+function showTip(html, x, y){
+  tip.html(html)
+    .style("left", (x + 12) + "px")
+    .style("top",  (y + 12) + "px")
+    .classed("hidden", false);
+}
+function hideTip(){
+  tip.classed("hidden", true).style("left","-9999px").style("top","-9999px");
+}
+
+let rawRows = [];
+let revRows = [];
+let expRows = [];
+let lessRows = [];
+
+// For showing the "More" button (count > 1)
+let revBudgetToAccounts  = new Map();
+let expBudgetToAccounts  = new Map();
+let lessBudgetToAccounts = new Map();
+
+// For responsive re-render of the current pie
+let lastPieState = null; // { allItems, opts, header }
+let pieHistory = [];
+
+init();
+
+async function init(){
+  try{
+    const rawTsv = await fetch(TSV_URL).then(r => r.text());
+    const parsed = d3.tsvParse(rawTsv);
+
+    // <<< Set these EXACTLY to your TSV headers >>>
+    const TYPE_COL     = "Type";
+    const BUDGET_COL   = "Budget";
+    const DEPT_COL     = "Department";
+    const ACCT_COL     = "Account";
+    const APPROVED_COL = "2025-2026 Approved";
+
+    const money = s => {
+      const v = +String(s ?? "").replace(/[^0-9.-]/g,"");
+      return Number.isFinite(v) ? v : 0;
+    };
+
+    rawRows = parsed.map(d => ({
+      Type: (d[TYPE_COL] ?? "").trim(),
+      Budget: (d[BUDGET_COL] ?? "").trim(),
+      Department: (d[DEPT_COL] ?? "").trim(),
+      Account: (d[ACCT_COL] ?? "").trim(),
+      Approved: money(d[APPROVED_COL])
+    }));
+
+    const normType = s => String(s||"").trim().toUpperCase();
+    revRows  = rawRows.filter(r => normType(r.Type) === "REVENUE" && r.Budget && r.Approved > 0);
+    expRows  = rawRows.filter(r => normType(r.Type) === "EXPENSE" && r.Budget && r.Approved > 0);
+    lessRows = rawRows.filter(r => normType(r.Type) === "LESS"    && r.Budget && r.Approved > 0);
+
+    // Build Budget -> Accounts list (for >1 check)
+    revBudgetToAccounts  = buildBudgetAccounts(revRows);
+    expBudgetToAccounts  = buildBudgetAccounts(expRows);
+    lessBudgetToAccounts = buildBudgetAccounts(lessRows);
+
+    renderBudgetTable();
+
+    backBtn.on("click", () => {
+        hideTip();
+      if (pieHistory.length > 0) {
+        const prev = pieHistory.pop();
+        // Restore header + render the prior pie
+        applyHeader(prev.header);
+        renderPie(prev.allItems, prev.opts);
+        lastPieState = prev;
+      } else {
+        // No more pie levels—return to table
+        pieView.classed("hidden", true);
+        tableView.classed("hidden", false);
+        backBtn.classed("hidden", true);
+        lastPieState = null;
+      }
+    });
+
+    // Debounced resize that respects current pie state
+    let t=null;
+    window.addEventListener("resize", () => {
+      clearTimeout(t);
+      t=setTimeout(()=>{
+        if(lastPieState){
+          const { allItems, opts, header } = lastPieState;
+          applyHeader(header);
+          renderPie(allItems, opts);
+        }
+      }, 120);
+    });
+
+  }catch(err){
+    console.error(err);
+    alert(`Problem loading/structuring data:\n${err.message}`);
   }
-  return null;
 }
 
-function parseNumber(x) {
-  if (x == null) return 0;
-  const s = String(x).replace(/[\$,]/g, "").trim();
-  const v = Number(s);
-  return Number.isFinite(v) ? v : 0;
+/* ===== Helpers ===== */
+
+function renderLegend(pieData, color) {
+  // pieData should be your arcs (same data you bind to slices)
+  // color is your color scale
+
+  const legend = d3.select("#legend");
+  // Efficient join that handles enter + update + exit
+  const items = legend.selectAll(".legend-item")
+    .data(pieData, d => d.data.id ?? d.data.key ?? d.data.account ?? d.index);
+
+  items.exit().remove();
+
+  const enter = items.enter()
+    .append("div")
+    .attr("class", "legend-item")
+    .attr("role", "listitem")
+    .attr("aria-label", d => `${(d.data.account ?? d.data.key ?? "Item")} ${fmtMoney0(d.data.value)}`);
+
+  enter.append("span")
+    .attr("class", "legend-swatch")
+    .style("background-color", d => color(d.data.key ?? d.data.account ?? d.index));
+
+  const textWrap = enter.append("div").attr("class", "legend-text");
+  textWrap.append("div").attr("class", "legend-title");
+  textWrap.append("div").attr("class", "legend-value");
+
+  // enter + update
+  const merged = enter.merge(items);
+  merged.select(".legend-title")
+    .text(d => d.data.account ?? d.data.key ?? d.data.name ?? "Other");
+
+  merged.select(".legend-value")
+    .text(d => fmtMoney0(d.data.value));
 }
 
-// Returns {kept: [{name,value,meta}], other: [{...}, ...], total}
-function withOtherBucket(items, threshold = 0.05) {
-  const total = d3.sum(items, d => d.value);
-  if (total <= 0) return { kept: items, other: [], total };
+function applyHeader(header){
+  if (!header) return;
+  pieTitle.text(header.titleText || "");
+  pieSubhead.text(header.subheadText || "");
+}
 
-  // Sort ascending by value; find smallest N (N >= 2) whose sum < threshold
-  const sortedAsc = items.slice().sort((a, b) => d3.ascending(a.value, b.value));
-  let bucket = [];
-  let acc = 0;
-  for (let i = 0; i < sortedAsc.length; i++) {
-    const next = sortedAsc[i];
-    const nextAcc = acc + next.value;
-    if (i + 1 >= 2 && nextAcc / total < threshold) {
-      bucket.push(next);
-      acc = nextAcc;
-    } else if (i + 1 < 2) {
-      // we need at least 2 in the bucket; force the first two in and keep checking
-      bucket.push(next);
-      acc = nextAcc;
-    } else {
-      break;
+function navigateToPie(allItems, opts, header){
+    // Dismiss on tap anywhere in the SVG and on resize/scroll
+    pieSvg.on("pointerdown", (event) => {
+    // only hide if you tapped somewhere that's NOT a slice
+    if (!event.target.closest?.("path.slice")) hideTip();
+    });
+    window.addEventListener("resize", hideTip, { passive: true });
+    window.addEventListener("scroll", hideTip, { passive: true });
+
+    hideTip();
+  // Push current view to history if we’re already showing a pie
+  if (lastPieState){
+    pieHistory.push(lastPieState);
+  }
+
+  // Ensure pie view is visible
+  tableView.classed("hidden", true);
+  pieView.classed("hidden", false);
+  backBtn.classed("hidden", false);
+
+  // Update header (title/subhead)
+  const hdr = header || (lastPieState ? lastPieState.header : null);
+  applyHeader(hdr);
+
+  // Render and capture state
+  renderPie(allItems, opts);
+  lastPieState = { allItems, opts, header: hdr };
+}
+
+function buildBudgetAccounts(rows){
+  // Budget -> [{account, value}] sorted desc
+  return new Map(
+    d3.rollups(
+      rows,
+      v => {
+        const grouped = d3.rollups(
+          v,
+          g => d3.sum(g, r => r.Approved),
+          r => r.Account || "(Unlabeled)"
+        ).map(([account, value]) => ({ account, value }));
+        return grouped.sort((a,b)=>d3.descending(a.value, b.value));
+      },
+      r => r.Budget
+    )
+  );
+}
+function sumRows(rows){ return d3.sum(rows, d => d.Approved); }
+function splitDepartments(cell){
+  if(!cell) return [];
+  return cell.split(/[;,]/).map(s=>s.trim()).filter(Boolean);
+}
+function cleanName(s){
+  // Remove a leading "City of Moody" plus common separators
+  if(!s) return s;
+  return s
+    .replace(/^\s*City of Moody\s*[-:–—]?\s*/i, "")
+    .replace(/\s*\(City of Moody\)\s*$/i, "")
+    .trim();
+}
+
+/* Grouping helper: combine all <5% into "Other"; if that sum <5%,
+   keep adding the next-smallest slices until Other ≥5%. */
+function groupStrictFivePct(items){
+  const total = d3.sum(items, d=>d.value) || 1;
+  const pct   = v => (v/total)*100;
+
+  // Sort ascending by value
+  const asc = [...items].sort((a,b)=>d3.ascending(a.value, b.value));
+
+  // Take all <5%
+  let smalls = asc.filter(d => pct(d.value) < 4);
+  let remaining = asc.filter(d => pct(d.value) >= 4);
+
+  // If nothing to group, return original
+  if (smalls.length === 0) return items;
+
+  let otherValue = d3.sum(smalls, d=>d.value);
+
+  // Ensure "Other" itself is ≥5% (and avoid consuming everything)
+  while ((otherValue/total)*100 < 4 && remaining.length > 0) {
+    const next = remaining.shift(); // smallest of the remaining
+    smalls.push(next);
+    otherValue += next.value;
+  }
+
+  // Edge case: if we consumed everything, revert
+  if (smalls.length === asc.length) return items;
+
+  const other = { account: "Other", value: otherValue, __other: smalls };
+  const keep  = asc.filter(d => !smalls.includes(d));
+
+  return [...keep, other];
+}
+
+// Wrap <text> to a given width (multi-line tspan)
+function wrapText(selection, width, lineHeight = 1.15){
+  selection.each(function(){
+    const text = d3.select(this);
+    const words = text.text().split(/\s+/).filter(Boolean);
+    let line = [];
+    let tspan = text.text(null).append("tspan").attr("x", 0).attr("dy", "0em");
+    for (let i=0; i<words.length; i++){
+      line.push(words[i]);
+      tspan.text(line.join(" "));
+      if (tspan.node().getComputedTextLength() > width){
+        line.pop();
+        tspan.text(line.join(" "));
+        line = [words[i]];
+        tspan = text.append("tspan")
+          .attr("x", 0)
+          .attr("dy", `${lineHeight}em`)
+          .text(words[i]);
+      }
     }
-  }
-
-  // If making “Other” wouldn’t reduce clutter, skip it.
-  if (bucket.length < 2) return { kept: items, other: [], total };
-
-  const bucketIds = new Set(bucket.map(d => d.id));
-  const kept = items.filter(d => !bucketIds.has(d.id));
-  const otherValue = d3.sum(bucket, d => d.value);
-
-  kept.push({
-    id: "__OTHER__",
-    name: "Other",
-    value: otherValue,
-    meta: { children: bucket } // store what’s inside
   });
-
-  return { kept, other: bucket, total };
 }
 
-// ----------------------------------------------
-// Layout
-// ----------------------------------------------
-const root = d3.select("#app").style("position", "relative");
+// ===== NEW: size-aware overlap resolver for external label columns =====
+function resolveOverlaps(nodes, minY, maxY, pad = 6){
+  // nodes: [{ y, height }]
+  nodes.sort((a,b)=>a.y - b.y);
 
-let width = 900;
-let height = 560;
-let radius = Math.min(width, height) / 2 - 10;
-
-const svg = root
-  .append("svg")
-  .attr("viewBox", `0 0 ${width} ${height}`)
-  .attr("width", "100%")
-  .attr("height", "100%")
-  .attr("preserveAspectRatio", "xMidYMid meet");;
-
-const chartG = svg
-  .append("g");
-
-let arc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius);
-let arcHover = d3.arc().innerRadius(radius * 0.52).outerRadius(radius * 1.03);
-
-const pie = d3
-  .pie()
-  .value(d => d.value)
-  .sort(null);
-
-const color = d3.scaleOrdinal(d3.schemeTableau10);
-
-// Tooltip
-const tip = root
-  .append("div")
-  .attr("class", "mb-tooltip")
-  .style("opacity", 0);
-
-// Breadcrumb
-const crumbs = root.append("div").attr("class", "mb-breadcrumb");
-
-// Center label
-const center = chartG.append("text")
-  .attr("text-anchor", "middle")
-  .attr("dy", "0.35em")
-  .attr("class", "mb-center");
-
-// Back button
-const backBtn = root.append("button")
-  .attr("class", "mb-back")
-  .text("◀ Back")
-  .style("display", "none")
-  .on("click", () => drillBack());
-
-// ----------------------------------------------
-// Data prep
-// ----------------------------------------------
-async function loadData() {
-  var $_GET = {};
-  if(document.location.toString().indexOf('?' !== -1)) {
-    var query = document.location
-        .toString()
-        .replace(/^.*?\?/, '')
-        .replace(/#.*$/, '')
-        .split('&');
-    for(var i=0, l=query.length; i<l; i++) {
-       var aux = decodeURIComponent(query[i]).split('=');
-       $_GET[aux[0]] = aux[1];
+  // forward pass (push down)
+  for(let i=1; i<nodes.length; i++){
+    const prev = nodes[i-1], cur = nodes[i];
+    const needed = (prev.height/2 + cur.height/2) + pad;
+    if (cur.y - prev.y < needed){
+      cur.y = prev.y + needed;
     }
   }
-  
-  let fetch_url = DEFAULT_DATA_URL;
-  if("doc_id" in $_GET) {
-    fetch_url = DEFAULT_DATA_URL_START + $_GET['doc_id'] + "/pub?";
-  }
-  if("gid" in $_GET) {
-    fetch_url += "&gid=" + $_GET["gid"] + "&single=true";
-  }
-  if(fetch_url != DEFAULT_DATA_URL) {
-    fetch_url += "&output=tsv";
+
+  // backward pass (pull up)
+  for(let i=nodes.length-2; i>=0; i--){
+    const cur = nodes[i], next = nodes[i+1];
+    const needed = (cur.height/2 + next.height/2) + pad;
+    if (next.y - cur.y < needed){
+      cur.y = next.y - needed;
+    }
   }
 
-  const tsv = await fetch(fetch_url).then(r => r.text());
-  const rows = d3.tsvParse(tsv);
-
-  // Column detection
-  const sample = rows[0] || {};
-  const deptKey = firstKey(sample, ["Department","department", "dept", "division", "fund", "function"]);
-  const acctKey = firstKey(sample, ["Account Title","account title", "account", "title", "line item"]);
-  const approvedKey = firstKey(sample, ["2025-2026 Approved","2025-2026 approved", "2025 - 2026 approved", "approved 2025-2026"]);
-
-  if (!deptKey || !acctKey || !approvedKey) {
-    console.error("Could not detect headers. Found keys:", Object.keys(sample));
-    throw new Error("Missing expected columns (Department, Account Title, 2025-2026 Approved).");
+  // clamp
+  for(const n of nodes){
+    n.y = Math.max(minY + n.height/2, Math.min(maxY - n.height/2, n.y));
   }
 
-  const clean = rows.map((r, i) => ({
-    id: `row-${i}`,
-    dept: String(r[deptKey] || "").trim().replace("City of Moody", ""),
-    account: String(r[acctKey] || "").trim(),
-    approved: parseNumber(r[approvedKey])
-  })).filter(d => d.dept && d.account && d.approved > 0);
-
-  // Aggregate department totals
-  const byDept = d3.rollups(
-    clean,
-    v => d3.sum(v, d => d.approved),
-    d => d.dept
-  ).map(([dept, total]) => ({ id: `dept-${dept}`, name: dept, value: total }));
-
-  // Build a map: dept -> accounts[]
-  const accountsByDept = d3.group(clean, d => d.dept);
-  return { byDept, accountsByDept };
+  // final forward pass if clamping created new conflicts
+  for(let i=1; i<nodes.length; i++){
+    const prev = nodes[i-1], cur = nodes[i];
+    const needed = (prev.height/2 + cur.height/2) + pad;
+    if (cur.y - prev.y < needed){
+      cur.y = Math.min(maxY - cur.height/2, prev.y + needed);
+    }
+  }
+  return nodes;
 }
 
-// ----------------------------------------------
-// Drilldown controller
-// ----------------------------------------------
-const state = {
-  level: 0,              // 0 = departments, 1 = accounts (or expanded “Other”)
-  stack: [],             // breadcrumb stack of {title, data, kind}
-  current: null          // {title, data, kind}
-};
+/* ===== Table ===== */
+function renderBudgetTable(){
+  tableBody.selectAll("*").remove();
 
-function showBreadcrumb() {
-  if (!state.stack.length && !state.current) {
-    crumbs.html("");
+  const groupByBudget = rows => {
+    const map = new Map();
+    for(const r of rows){
+      const entry = map.get(r.Budget) || { total:0, accounts:new Set() };
+      entry.total += r.Approved;
+      entry.accounts.add(r.Account || "(Unlabeled)");
+      map.set(r.Budget, entry);
+    }
+    return [...map.entries()]
+      .map(([budget, {total, accounts}]) => ({ budget, total, accountsCount: accounts.size }))
+      .sort((a,b)=>d3.descending(a.total, b.total));
+  };
+
+  const revAgg  = groupByBudget(revRows);
+  const expAgg  = groupByBudget(expRows);
+  const lessAgg = groupByBudget(lessRows);
+
+  const revTotal  = d3.sum(revRows, d=>d.Approved);
+  const expTotal  = d3.sum(expRows, d=>d.Approved);
+  const lessTotal = d3.sum(lessRows, d=>d.Approved);
+  const net = revTotal - expTotal - lessTotal; // Difference Revenue vs Expense
+
+  // Helper to render a block of budget rows (no section headers)
+  const appendRows = (items, accountsMap, sectionLabel) => {
+    for(const row of items){
+      const accounts = accountsMap.get(row.budget) || [];
+      const showMore = accounts.length > 1;
+
+      const tr = tableBody.append("tr");
+
+      // Budget cell (with optional More button)
+      const tdBudget = tr.append("td").attr("class","col-budget");
+      tdBudget.text(row.budget);
+      if (showMore){
+        tdBudget.append("button")
+          .attr("class","more-btn")
+          .attr("type","button")
+          .text("More")
+          .on("click", (e) => {
+            e.stopPropagation();
+            showDeptPieForBudget(sectionLabel, row.budget);
+          });
+      }
+
+      // Amount
+      tr.append("td").attr("class","col-total").text(dollars(row.total));
+    }
+  };
+
+  // Renders: Revenues → Total Revenues
+  appendRows(revAgg, revBudgetToAccounts, "Revenues");
+  tableBody.append("tr").attr("class","total-row total-rev")
+    .html(`
+      <td class="col-budget label">Total Revenues</td>
+      <td class="col-total val">${dollars(revTotal)}</td>
+    `);
+
+  // Expenses → Total Expenses
+  appendRows(expAgg, expBudgetToAccounts, "Expenses");
+  tableBody.append("tr").attr("class","total-row total-exp")
+    .html(`
+      <td class="col-budget label">Total Expenses</td>
+      <td class="col-total val">${dollars(expTotal)}</td>
+    `);
+
+  // LESS (no section total)
+  appendRows(lessAgg, lessBudgetToAccounts, "LESS");
+
+  // Net Difference (Revenues - Expenses - LESS)
+  tableBody.append("tr").attr("class","net-row total-row")
+    .html(`
+      <td class="col-budget label">Difference Revenue vs Expense</td>
+      <td class="col-total val">${dollars(net)}</td>
+    `);
+}
+
+/* ===== Pie: Dept (per budget) -> Accounts (dept+budget) ===== */
+function showDeptPieForBudget(sectionLabel, budgetName){
+  const baseRows =
+    sectionLabel === "Revenues" ? revRows :
+    sectionLabel === "Expenses" ? expRows : lessRows;
+
+  // rows for this budget
+  const rows = baseRows.filter(r => r.Budget === budgetName && r.Approved > 0);
+  if(rows.length === 0){
+    alert(`No rows found for "${budgetName}".`);
     return;
   }
-  const parts = [...state.stack.map(s => s.title), state.current?.title].filter(Boolean);
-  crumbs.html(parts.map((p, i) => {
-    const isLast = i === parts.length - 1;
-    return `<span class="${isLast ? "mb-crumb-last" : "mb-crumb"}">${p}</span>`;
-  }).join(`<span class="mb-crumb-sep">›</span>`));
-}
 
-function drillTo({ title, data, kind }) {
-  state.current = { title, data, kind };
-  state.level = (kind === "departments") ? 0 : 1;
-  backBtn.style("display", state.stack.length ? null : "none");
-  showBreadcrumb();
-  renderPie(data, title);
-}
-
-function drillIn(next) {
-  if (state.current) state.stack.push(state.current);
-  drillTo(next);
-}
-
-function drillBack() {
-  if (!state.stack.length) return;
-  const prev = state.stack.pop();
-  drillTo(prev);
-}
-
-// Build the “view data” for departments, with Other if needed
-function viewDepartments(withOther = true) {
-  const { byDept } = cache;
-  let items = byDept.map(d => ({ ...d })); // copy
-  if (withOther) {
-    items = withOtherBucket(items).kept;
+  // Sum by department for THIS budget (split multi-dept rows evenly)
+  const deptSums = new Map();
+  for(const r of rows){
+    const depts = splitDepartments(r.Department);
+    if(depts.length === 0) continue;
+    const share = r.Approved / depts.length;
+    depts.forEach(d => {
+      const key = cleanName(d);
+      deptSums.set(key, (deptSums.get(key)||0) + share);
+    });
   }
-  return items;
+  const items = [...deptSums.entries()]
+    .map(([account,value]) => ({ account, value }))
+    .sort((a,b)=>d3.descending(a.value,b.value));
+
+  if(items.length === 0){
+    alert(`No departments listed for "${budgetName}".`);
+    return;
+  }
+
+  const rootTotal = d3.sum(items, d=>d.value);
+
+  navigateToPie(
+    items,
+    {
+      groupOther: true,               // show a single "Other" in the base view
+      rootTotal,
+      rootLabel: `${budgetName} total`,
+      onSliceClick: (d) => {
+        const dept = d.data.account;
+        showAccountsPieForDeptBudget(sectionLabel, budgetName, dept);
+      }
+    },
+    {
+      titleText: budgetName,
+      subheadText: `${sectionLabel} • Departments`
+    }
+  );
 }
 
-// Build the “view data” for accounts in a dept, with Other if needed
-function viewAccountsForDept(deptName, withOther = true) {
-  const rows = cache.accountsByDept.get(deptName) || [];
-  let items = rows.map((r) => ({
-    id: `acct-${deptName}-${r.account}`,
-    name: r.account,
-    value: r.approved,
-    meta: { dept: deptName }
+function showAccountsPieForDeptBudget(sectionLabel, budgetName, dept){
+  const baseRows =
+    sectionLabel === "Revenues" ? revRows :
+    sectionLabel === "Expenses" ? expRows : lessRows;
+
+  // Filter to this budget+dept
+  const rows = baseRows.filter(r =>
+    r.Budget === budgetName &&
+    r.Approved > 0 &&
+    splitDepartments(r.Department).some(d => cleanName(d) === dept)
+  );
+  if(rows.length === 0){
+    alert(`No accounts found for ${dept} in "${budgetName}".`);
+    return;
+  }
+
+  const items = d3.rollups(
+    rows,
+    v => d3.sum(v, r => r.Approved),
+    r => cleanName(r.Account || "(Unlabeled)")
+  ).map(([account, value]) => ({ account, value }))
+   .sort((a,b)=>d3.descending(a.value,b.value));
+
+  const rootTotal = d3.sum(items, d=>d.value);
+
+  navigateToPie(
+    items,
+    {
+      groupOther: true,               // show a single "Other" in the base view
+      rootTotal,
+      rootLabel: `Total for ${dept}`,
+      onSliceClick: null
+    },
+    {
+      titleText: dept,
+      subheadText: `From budget: ${budgetName}`
+    }
+  );
+}
+
+/* ===== Generic pie ===== */
+function renderPie(allItems, {
+  groupOther = true,
+  onSliceClick = null,
+  // keep percentages relative to the original/root pie
+  rootTotal = null,
+  rootLabel = "Total"
+} = {}){
+  pieSvg.selectAll("*").remove();
+  pieLegend.selectAll("*").remove();
+
+  const width = Math.min(1100, Math.max(360, window.innerWidth - 24));
+  const height = Math.max(420, Math.round(width * 0.8));
+  setViewBox(pieSvg, width, height);
+
+  const outerR = Math.min(width, height) * 0.40;
+  const innerR = Math.round(outerR * 0.55);
+  const outerHoverR = Math.round(outerR * 1.06);  // gentle pop
+  const cx = width/2, cy = height/2 + 6;
+
+  // Apply grouping + name cleanup
+  let baseItems = [...allItems].map(d => ({
+    account: cleanName(d.account),
+    value: d.value,
+    __other: d.__other
+      ? d.__other.map(x => ({ account: cleanName(x.account), value: x.value }))
+      : undefined
   }));
-  if (withOther) {
-    items = withOtherBucket(items).kept;
+  if (groupOther){
+    baseItems = groupStrictFivePct(baseItems);
   }
-  return items;
+
+  // Sort largest → smallest, but keep "Other" (if present) at the end.
+    const hadOther = baseItems.some(d => d.account === "Other");
+    baseItems.sort((a,b) => d3.descending(a.value, b.value));
+    if (hadOther) {
+    const idx = baseItems.findIndex(d => d.account === "Other");
+    if (idx > -1) {
+        const [other] = baseItems.splice(idx, 1);
+        baseItems.push(other);
+    }
+    }
+
+  const localTotal = d3.sum(baseItems, d=>d.value) || 1;
+  const denom = (rootTotal ?? localTotal); // fixed denominator when provided
+  const percentOfRoot = v => (v/denom) * 100;
+
+  const color = d3.scaleOrdinal()
+    .domain(baseItems.map(d=>d.account))
+    .range(d3.schemeTableau10.concat(d3.schemeSet3));
+
+  const pieGen   = d3.pie().value(d=>d.value).sort(null);
+  const arcGen   = d3.arc().innerRadius(innerR).outerRadius(outerR);
+  const arcHover = d3.arc().innerRadius(innerR).outerRadius(outerHoverR);
+  const arcOuterLabel = d3.arc().innerRadius(outerR + 14).outerRadius(outerR + 14);
+  const arcOnSlice = d3.arc().innerRadius((innerR + outerR)/2).outerRadius((innerR + outerR)/2); // mid-band
+
+  // Root group
+  const g = pieSvg.append("g").attr("transform", `translate(${cx},${cy})`);
+
+  // === Hatch pattern for "Other" ===
+  const defs = pieSvg.append("defs");
+  const hatch = defs.append("pattern")
+    .attr("id","otherHatch")
+    .attr("patternUnits","userSpaceOnUse")
+    .attr("width", 6).attr("height", 6)
+    .attr("patternTransform","rotate(45)");
+  hatch.append("rect").attr("width",6).attr("height",6).attr("fill","#111827"); // dark base
+  hatch.append("line").attr("x1",0).attr("y1",0).attr("x2",0).attr("y2",6)
+    .attr("stroke","#a78bfa").attr("stroke-width",2); // violet stripes
+
+  const arcs = pieGen(baseItems);
+  const arcByAccount = new Map(arcs.map(d => [d.data.account, d]));
+
+  function onSliceActivate(event, d) {
+  hideTip && hideTip();
+
+  if (d.data.__other) {
+    // Expand "Other" ONCE: render without grouping so no second "Other"
+    const expanded = d.data.__other.sort((a,b)=>d3.descending(a.value,b.value));
+    navigateToPie(
+      expanded,
+      {
+        groupOther: false,
+        onSliceClick,
+        rootTotal: denom,  // keep denominator fixed
+        rootLabel
+      },
+      lastPieState?.header
+    );
+    return;
+  }
+
+  if (typeof onSliceClick === "function") {
+    onSliceClick(d);
+  }
 }
 
-// If user clicks "Other" at departments: show its departments
-// If user clicks "Other" at accounts: show the actual accounts
-function expandOther(container) {
-  // container.meta.children is the array of items that were bucketed
-  const kids = container.meta?.children || [];
-  return kids.map(k => ({ ...k })); // shallow copy
-}
 
-// ----------------------------------------------
-// Render
-// ----------------------------------------------
-function renderPie(items, title = "") {
-  const total = d3.sum(items, d => d.value);
-  
-  center.text(total > 0 ? `${title}\n${fmtCurrency(total)}` : title);
-
-  const arcs = pie(items);
-
-  const g = chartG.selectAll("path.slice")
-    .data(arcs, d => d.data.id);
-
-  g.enter()
-    .append("path")
-    .attr("class", "slice")
-    .attr("fill", d => color(d.data.name))
-    .attr("d", arc)
-    .on("mouseenter", function (event, d) {
-      d3.select(this).transition().duration(150).attr("d", arcHover);
-      const pct = total ? d.data.value / total : 0;
-      tip.style("opacity", 1)
-        .html(`
-          <div class="mb-tip-title">${d.data.name}</div>
-          <div>${fmtCurrency(d.data.value)} <span class="mb-tip-pct">(${fmtPct(pct)})</span></div>
-        `);
-    })
-    .on("mousemove", function (event) {
-      tip.style("left", (event.pageX + 12) + "px")
-         .style("top", (event.pageY + 12) + "px");
-    })
-    .on("mouseleave", function () {
-      d3.select(this).transition().duration(150).attr("d", arc);
-      tip.style("opacity", 0);
-    })
-    .on("click", (event, d) => {
-      // Drill logic
-      if (state.level === 0) {
-        // Clicked a department slice
-        if (d.data.id === "__OTHER__") {
-          const kids = expandOther(d.data); // array of small departments
-          drillIn({
-            title: "Other Departments",
-            data: kids,
-            kind: "departments" // keep at dept-level; clicking a dept here drills to its accounts
-          });
-        } else {
-          drillIn({
-            title: d.data.name,
-            data: viewAccountsForDept(d.data.name, true),
-            kind: "accounts"
-          });
-        }
-      } else {
-        // level 1 (accounts)
-        if (d.data.id === "__OTHER__") {
-          const kids = expandOther(d.data); // the small accounts for this dept
-          drillIn({
-            title: "Other Accounts",
-            data: kids,
-            kind: "accounts"
-          });
-        }
-        // (If we ever add a deeper level, handle here.)
+  // ==== Slices (consistent hover; "Other" clickable/keyboard) ====
+  const slices = g.selectAll("path.slice").data(arcs).join("path")
+    .attr("class", d => "slice" + (d.data.account==="Other" ? " other" : ""))
+    .attr("d", arcGen)
+    .attr("fill", d => d.data.account==="Other" ? "url(#otherHatch)" : color(d.data.account))
+    .attr("tabindex", d => d.data.__other ? 0 : null)
+    .on("click", onSliceActivate)
+    .on("keydown", (event, d) => {
+      if ((event.key==="Enter" || event.key===" ") && d.data.__other){
+        event.preventDefault();
+        const expanded = d.data.__other.sort((a,b)=>d3.descending(a.value,b.value));
+        navigateToPie(
+          expanded,
+          {
+            groupOther: false,
+            onSliceClick,
+            rootTotal: denom,
+            rootLabel
+          },
+          lastPieState?.header
+        );
       }
     })
-    .append("title")
-    .text(d => `${d.data.name}\n${fmtCurrency(d.data.value)}`);
+    .on("pointermove", (event, d) => {
+    const p = (d.data.value / (rootTotal ?? d3.sum(baseItems, x => x.value))) * 100;
+    const hint = d.data.__other ? `<div class="tip-hint">Click to expand</div>` : "";
+    // Use pointer coordinates (works for touch + mouse)
+    const x = event.pageX ?? (event.touches && event.touches[0]?.pageX) ?? 0;
+    const y = event.pageY ?? (event.touches && event.touches[0]?.pageY) ?? 0;
+    showTip(`<strong>${d.data.account}</strong><br>${fmt1(p)}%${hint}`, x, y);
+    })
+    .on("pointerenter", (event, d) => {
+        const p = (d.data.value / (rootTotal ?? d3.sum(baseItems, x => x.value))) * 100;
+        const hint = d.data.__other ? `<div class="tip-hint">Click to expand</div>` : "";
+        const x = event.pageX ?? event.clientX ?? 0;
+        const y = event.pageY ?? event.clientY ?? 0;
+        showTip(`<strong>${d.data.account}</strong><br>${fmt1(p)}%${hint}`, x, y);
+        })
+        .on("pointerdown", (event, d) => {
+        event.stopPropagation(); // don't let SVG hide it
+        const p = (d.data.value / (rootTotal ?? d3.sum(baseItems, x => x.value))) * 100;
+        const hint = d.data.__other ? `<div class="tip-hint">Click to expand</div>` : "";
+        const x = event.pageX ?? event.clientX ?? 0;
+        const y = event.pageY ?? event.clientY ?? 0;
+        showTip(`<strong>${d.data.account}</strong><br>${fmt1(p)}%${hint}`, x, y);
+        })
+    .on("pointerleave", function(){
+    hideTip();
+    d3.select(this).interrupt().transition().duration(160).attr("d", arcGen(d3.select(this).datum()));
+    });
 
-  g.transition().duration(450).attrTween("d", function (d) {
-    const i = d3.interpolate(this._current || d, d);
-    this._current = i(0);
-    return t => arc(i(t));
+  // Accessibility title uses the root denominator too
+  slices.append("title")
+    .text(d => `${d.data.account}\n${fmt1(percentOfRoot(d.data.value))}%`);
+
+  // === Labeling rules ===
+  // Show labels if slice ≥7% OR among top 8 by value
+  const ranked = [...arcs].sort((a,b)=>d3.descending(a.data.value,b.data.value));
+  const cutoffVal = ranked[Math.min(7, ranked.length-1)]?.data?.value ?? Infinity;
+  const labelArcs = arcs.filter(a => percentOfRoot(a.data.value) >= 7 || a.data.value >= cutoffVal);
+
+  // Split into "big" (≥8%) vs "small" (<8%) for leader policy
+  const bigArcs   = labelArcs.filter(a => percentOfRoot(a.data.value) >= 8);
+  const smallArcs = labelArcs.filter(a => percentOfRoot(a.data.value) < 8);
+
+  const labelG = g.append("g");
+
+  // ---------- SMALL LABELS: keep on-screen ----------
+  const labelMargin = 8;
+  const colW = Math.min(220, Math.max(window.innerWidth < 420 ? 108 : 120, width * 0.32));
+  const leftColX  = - (width/2) + labelMargin + colW/2;
+  const rightColX =   (width/2) - labelMargin - colW/2;
+  const topLimit  = - (height/2) + labelMargin;
+  const botLimit  =   (height/2) - labelMargin;
+
+  // Build positioning targets for small labels
+  const smallTargets = smallArcs.map(d => {
+    const [cx0, cy0] = arcOuterLabel.centroid(d);
+    const rightSide = cx0 >= 0;
+    return {
+      d,
+      side: rightSide ? "R" : "L",
+      x: rightSide ? rightColX : leftColX,
+      y: cy0,
+      height: 30 // temp, will be measured precisely after render
+    };
   });
 
-  g.exit().transition().duration(300).style("opacity", 0).remove();
+  // Split left/right (we'll resolve after measuring)
+  const leftNodes  = smallTargets.filter(n => n.side === "L");
+  const rightNodes = smallTargets.filter(n => n.side === "R");
 
-  // Labels
-  const texts = chartG.selectAll("text.slice-label").data(arcs, d => d.data.id);
+  // Leader lines from slice -> elbow -> label edge (first pass; will update later)
+  const leaders = labelG.selectAll("path.leader").data(smallTargets).join("path")
+    .attr("class","leader")
+    .attr("d", n => {
+      const p = arcOuterLabel.centroid(n.d);
+      const mid = [p[0]*0.88, p[1]*0.88];
+      const edgeX = n.side === "R" ? (n.x - colW/2) : (n.x + colW/2);
+      const end = [edgeX, n.y];
+      return d3.line().curve(d3.curveBasis)([arcGen.centroid(n.d), mid, end]);
+    });
 
-const enter = texts.enter()
-  .append("text")
-  .attr("class", "slice-label")
-  .attr("text-anchor", "middle")
-  .attr("pointer-events", "none");
+  // External small labels, clamped inside columns
+  const smallLabels = labelG.selectAll("g.label-small").data(smallTargets).join("g")
+    .attr("class","label label-small")
+    .attr("transform", n => `translate(${n.x},${n.y})`);
 
-enter.append("tspan").attr("class", "label-name").attr("x", 0).attr("dy", "-0.2em");
-enter.append("tspan").attr("class", "label-value").attr("x", 0).attr("dy", "1.2em");
+  // Background pill to improve contrast
+  smallLabels.append("rect")
+    .attr("class","label-box")
+    .attr("x", -colW/2)
+    .attr("y", -16)
+    .attr("rx", 8).attr("ry", 8)
+    .attr("width", colW)
+    .attr("height", 34);
 
-texts.merge(enter)
-  .transition().duration(450)
-  .attrTween("transform", function (d) {
-    const i = d3.interpolate(this._pos || d, d);
-    this._pos = i(0);
-    return t => {
-      const a = arc.centroid(i(t));
-      return `translate(${a[0]},${a[1]})`;
-    };
-  })
-  .on("end", function (d) {
-    const pct = total ? d.data.value / total : 0;
+  // Title (wrap to column width)
+  const tTitle = smallLabels.append("text")
+    .attr("class","label-t")
+    .attr("text-anchor","middle")
+    .text(n => n.d.data.account)
+    .call(wrapText, colW - 14);
+
+  // Value line (always second block)
+  const tVal = smallLabels.append("text")
+    .attr("class","label-v")
+    .attr("text-anchor","middle")
+    .attr("dy","1.4em")
+    .text(n => dollars(n.d.data.value));
+
+  // Resize pill height to fit wrapped tspans and MEASURE true heights
+  smallLabels.each(function(n){
     const g = d3.select(this);
-    if (pct >= 0.04) {
-      g.select("tspan.label-name").text(d.data.name);
-      g.select("tspan.label-value").text(fmtCurrency(d.data.value));
-    } else {
-      g.select("tspan.label-name").text("");
-      g.select("tspan.label-value").text("");
+    const box = g.select("rect.label-box");
+    const title = g.select("text.label-t");
+    const tspans = title.selectAll("tspan").nodes();
+    const lineCt = Math.max(1, tspans.length);
+    const h = 8 + (lineCt * 16 * 1.15) + 18 + 8; // padding + lines + value + padding
+    g.select("text.label-v").attr("dy", `${(lineCt * 1.15) + 0.6}em`);
+    box.attr("height", h).attr("y", -h/2);
+    title.attr("dy", `${-(lineCt-1)*0.575}em`);
+
+    // precise measurement (accounts for font metrics)
+    const bbox = box.node().getBBox();
+    n.height = bbox.height || h;
+  });
+
+  // Resolve overlaps per column using real heights
+  resolveOverlaps(leftNodes,  topLimit, botLimit, 8);
+  resolveOverlaps(rightNodes, topLimit, botLimit, 8);
+
+  // Apply final positions
+  smallLabels.attr("transform", n => `translate(${n.x},${n.y})`);
+
+  // Redraw leaders with final label Y
+  leaders.attr("d", n => {
+    const p = arcOuterLabel.centroid(n.d);
+    const mid = [p[0]*0.88, p[1]*0.88];
+    const edgeX = n.side === "R" ? (n.x - colW/2) : (n.x + colW/2);
+    const end = [edgeX, n.y];
+    return d3.line().curve(d3.curveBasis)([arcGen.centroid(n.d), mid, end]);
+  });
+
+  // ---------- BIG LABELS: on-slice centered, no leaders ----------
+  const bigLabels = labelG.selectAll("g.label-big").data(bigArcs).join("g")
+    .attr("class","label label-big on-slice")
+    .attr("transform", d => {
+      const [x,y] = arcOnSlice.centroid(d);
+      return `translate(${x},${y})`;
+    });
+  bigLabels.append("text")
+    .attr("class","label-t on-slice-text")
+    .attr("text-anchor","middle")
+    .text(d => d.data.account);
+  bigLabels.append("text")
+    .attr("class","label-v on-slice-text")
+    .attr("text-anchor","middle")
+    .attr("dy","1.15em")
+    .text(d => dollars(d.data.value));
+
+// Legend (first 10 after grouping) — show name + dollars; flag "Other"
+// Legend (top 10 after grouping) — clickable; largest → smallest; "Other" flagged
+baseItems.slice(0,10).forEach(it => {
+  const isOther = it.account === "Other";
+  const d = arcByAccount.get(it.account); // corresponding arc datum
+
+  const badge = pieLegend.append("div")
+    .attr("class", "badge" + (isOther ? " other" : ""))
+    .attr("role", "button")
+    .attr("tabindex", 0)
+    .attr("aria-label", `${it.account} ${fmtMoney0(it.value)} — ${isOther ? "expand" : "view segment"}`);
+
+  const swatchStyle = isOther
+    ? "background:repeating-linear-gradient(45deg,#111827 0 6px,#a78bfa 6px 8px);"
+    : `background:${color(it.account)};`;
+
+  badge.html(`
+    <span class="swatch" style="${swatchStyle}"></span>
+    <div class="btxt">
+      <div class="btitle">${it.account}${isOther ? ' <span class="badge-hint">(expand)</span>':''}</div>
+      <div class="bval">${fmtMoney0(it.value)}</div>
+    </div>
+  `);
+
+  // Activate (click/tap)
+  badge.on("click", (event) => {
+    if (!d) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onSliceActivate(event, d);
+  });
+
+  // Keyboard accessibility: Enter/Space
+  badge.on("keydown", (event) => {
+    const k = event.code || event.key;
+    if (k === "Enter" || k === "Space" || k === " ") {
+      if (!d) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onSliceActivate(event, d);
     }
   });
+});
 
-  texts.exit().remove();
+
+  // === Center total (fixed to root) ===
+  const center = g.append("g").attr("class","pie-center");
+  center.append("text")
+    .attr("class","pie-center-value")
+    .attr("text-anchor","middle")
+    .attr("dy","-0.15em")
+    .text(dollars(denom));
+  center.append("text")
+    .attr("class","pie-center-label")
+    .attr("text-anchor","middle")
+    .attr("dy","1.1em")
+    .text(rootLabel || "Total");
+
+  // Save state for responsive re-render
+  lastPieState = { allItems, opts: { groupOther, onSliceClick, rootTotal: denom, rootLabel }, header: lastPieState?.header };
 }
-
-function resize() {
-  const box = root.node().getBoundingClientRect();
-  let W = Math.max(280, Math.round(box.width));       // never smaller than 280
-  let H = Math.max(360, Math.round(W * 0.62));        // keep nice aspect ratio
-
-  width = W;
-  height = H;
-  radius = Math.min(width, height) / 2 - 10;
-
-  svg.attr("viewBox", `0 0 ${width} ${height}`);
-  chartG.attr("transform", `translate(${width / 2}, ${height / 2})`);
-
-  arc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius);
-  arcHover = d3.arc().innerRadius(radius * 0.52).outerRadius(radius * 1.03);
-
-  // Re-render current view with new geometry
-  if (state.current) renderPie(state.current.data, state.current.title);
-}
-
-// ----------------------------------------------
-// Boot
-// ----------------------------------------------
-let cache = { byDept: [], accountsByDept: new Map() };
-
-(async function init() {
-  try {
-    cache = await loadData();
-
-    resize();
-    drillTo({
-      title: "2025–2026 Approved",
-      data: viewDepartments(true),
-      kind: "departments"
-    });
-
-    // Make it responsive
-    const ro = new ResizeObserver(() => {
-      // (SVG has viewBox + width:100%, so it scales automatically)
-    });
-    ro.observe(document.body);
-  } catch (err) {
-    console.error(err);
-    d3.select("#app").append("pre").text("Failed to load data:\n" + err.message);
-  }
-})();
