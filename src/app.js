@@ -160,9 +160,9 @@ async function loadData() {
 
   // Column detection
   const sample = rows[0] || {};
-  const deptKey = firstKey(sample, ["department", "dept", "division", "fund", "function"]);
-  const acctKey = firstKey(sample, ["account title", "account", "title", "line item"]);
-  const approvedKey = firstKey(sample, ["2025-2026 approved", "2025 - 2026 approved", "approved 2025-2026"]);
+  const deptKey = firstKey(sample, ["Department","department", "dept", "division", "fund", "function"]);
+  const acctKey = firstKey(sample, ["Account Title","account title", "account", "title", "line item"]);
+  const approvedKey = firstKey(sample, ["2025-2026 Approved","2025-2026 approved", "2025 - 2026 approved", "approved 2025-2026"]);
 
   if (!deptKey || !acctKey || !approvedKey) {
     console.error("Could not detect headers. Found keys:", Object.keys(sample));
