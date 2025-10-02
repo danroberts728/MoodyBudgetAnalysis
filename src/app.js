@@ -636,25 +636,25 @@ function renderPie(allItems, {
     const y = event.pageY ?? (event.touches && event.touches[0]?.pageY) ?? 0;
     showTip(`<strong>${d.data.account}</strong><br>${fmt1(p)}%${hint}`, x, y);
     })
-    .on("pointerenter", (event, d) => {
-        const p = (d.data.value / (rootTotal ?? d3.sum(baseItems, x => x.value))) * 100;
-        const hint = d.data.__other ? `<div class="tip-hint">Click to expand</div>` : "";
-        const x = event.pageX ?? event.clientX ?? 0;
-        const y = event.pageY ?? event.clientY ?? 0;
-        showTip(`<strong>${d.data.account}</strong><br>${fmt1(p)}%${hint}`, x, y);
-        })
-        .on("pointerdown", (event, d) => {
-        event.stopPropagation(); // don't let SVG hide it
-        const p = (d.data.value / (rootTotal ?? d3.sum(baseItems, x => x.value))) * 100;
-        const hint = d.data.__other ? `<div class="tip-hint">Click to expand</div>` : "";
-        const x = event.pageX ?? event.clientX ?? 0;
-        const y = event.pageY ?? event.clientY ?? 0;
-        showTip(`<strong>${d.data.account}</strong><br>${fmt1(p)}%${hint}`, x, y);
-        })
-    .on("pointerleave", function(){
-    hideTip();
-    d3.select(this).interrupt().transition().duration(160).attr("d", arcGen(d3.select(this).datum()));
-    });
+    .on("pointerenter", function (event, d) {
+  // keep the tooltip you added
+  const p = (d.data.value / (rootTotal ?? d3.sum(baseItems, x => x.value))) * 100;
+  const hint = d.data.__other ? `<div class="tip-hint">Click to expand</div>` : "";
+  const x = event.pageX ?? event.clientX ?? 0;
+  const y = event.pageY ?? event.clientY ?? 0;
+  showTip(`<strong>${d.data.account}</strong><br>${fmt1(p)}%${hint}`, x, y);
+
+  // restore the zoom pop
+  d3.select(this).interrupt()
+    .transition().duration(140)
+    .attr("d", arcHover(d));
+})
+.on("pointerleave", function () {
+  hideTip();
+  d3.select(this).interrupt()
+    .transition().duration(160)
+    .attr("d", arcGen(d3.select(this).datum()));
+});
 
   // Accessibility title uses the root denominator too
   slices.append("title")
