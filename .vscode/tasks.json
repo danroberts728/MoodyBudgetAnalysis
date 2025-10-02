@@ -6,18 +6,7 @@
             "type": "shell",
             "command": "http-server -p 8080", // Adjust port as needed
             "isBackground": true, // Runs in the background
-            "problemMatcher": {
-                "owner": "custom",
-                "pattern": [],
-                "background": {
-                "activeOnStart": true,
-                "beginsPattern": "Live Development Server is listening", // Adjust to your server's actual output
-                "endsPattern": "Server stopped" // Adjust to your server's actual output when stopping
-                }
-            }, 
-            "presentation": {
-                "reveal": "never" // Optional: Prevents the terminal from popping up
-            }
+            "problemMatcher": [] // no problem matching
         }
     ]
 }

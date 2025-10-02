@@ -1,115 +1,390 @@
 :root{
-  --bg:#0f1216;
-  --card:#151a21;
-  --ink:#e8eef6;
-  --muted:#9fb0c7;
-  --accent:#82b1ff;
-  --accent2:#5eead4;
-  --warn:#f59e0b;
-  --tap:#243041;
-  --ring:rgba(130,177,255,.35);
+  /* Brighter, professional palette */
+  --bg:#0e1117;
+  --card:#141a23;
+  --ink:#eaf2ff;
+  --muted:#a9b9d2;
+  --border:#1f2937;
+
+  --accent:#7cb7ff;
+  --accent-2:#a78bfa; /* violet */
+  --good:#34d399;     /* green */
+  --warn:#f59e0b;     /* amber */
+  --danger:#fb7185;   /* rose */
+  --info:#60a5fa;     /* blue */
+
+  --ring:rgba(124,183,255,.38);
 }
 
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
-  margin:0;
-  background:var(--bg);
-  color:var(--ink);
-  font:500 16px/1.4 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,"Helvetica Neue",Arial;
-  -webkit-font-smoothing:antialiased;
-  -moz-osx-font-smoothing:grayscale;
+  margin:0;background:var(--bg);color:var(--ink);
+  font:500 16px/1.45 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,"Helvetica Neue",Arial;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
 }
 
+.hidden{display:none !important}
+
+/* Header */
 .app-header{
   display:flex;align-items:center;justify-content:space-between;
   padding:12px clamp(12px,4vw,24px);
-  border-bottom:1px solid #1e2630;
-  background:linear-gradient(180deg,#0f1216,#0f121600);
+  border-bottom:1px solid var(--border);
+  background:linear-gradient(180deg,#0e1117,#0e111600);
   position:sticky;top:0;z-index:10;
 }
 .app-title{font-size:18px;margin:0}
 .controls{display:flex;gap:8px}
 .btn{
   appearance:none;border:0;border-radius:12px;
-  background:var(--accent);color:#071018;font-weight:700;
+  background:var(--accent);color:#071018;font-weight:800;
   padding:10px 14px;cursor:pointer;
   box-shadow:0 6px 16px rgba(0,0,0,.35);
 }
-.btn:hover{filter:brightness(1.04)}
-.btn:active{transform:translateY(1px)}
-.btn-secondary{background:#283142;color:var(--ink)}
-.btn[disabled]{opacity:.5;pointer-events:none}
-.hidden{display:none !important}
+.btn.hidden{display:none !important}
 
-.app-main{padding: clamp(8px,3vw,16px)}
+/* Layout */
+.app-main{padding: clamp(10px,3vw,18px)}
 .view{max-width:1100px;margin:0 auto}
+
+/* TABLE */
+.table-wrap{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:16px;
+  overflow:hidden; /* prevent horizontal scroll bleed */
+}
+.table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  table-layout:fixed;        /* ensures no horizontal scrolling */
+}
+thead th{
+  position:sticky;top:0;z-index:1;
+  background:linear-gradient(180deg,#101724,#0e1320);
+  color:var(--muted);
+  font-weight:800;
+  text-align:left;
+  padding:12px 10px;
+  border-bottom:1px solid var(--border);
+}
+thead .col-total{text-align:right}
+
+tbody td{
+  padding:12px 10px;
+  border-bottom:1px solid #1b2535;
+  vertical-align:middle;
+  word-break:break-word;
+}
+
+/* Row striping + hover for more color */
+tbody tr:nth-child(odd){ background:rgba(124,183,255,0.05) }
+tbody tr:hover{ background:rgba(167,139,250,0.10) }
+
+/* Budget and total columns */
+.col-budget{width:auto}
+.col-total{width:38%;text-align:right}
+tbody .col-total{font-variant-numeric:tabular-nums}
+
+/* Totals — strong emphasis, colorful accents */
+.total-row td{
+  background:linear-gradient(90deg, rgba(52,211,153,0.18), rgba(124,183,255,0.10));
+  font-size: 16px;
+  border-top:2px solid rgba(52,211,153,.55);
+  border-bottom:2px solid rgba(124,183,255,.35);
+  font-weight:900;
+  letter-spacing:.2px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.02);
+}
+.total-row .label{opacity:1}
+.total-row .val{font-variant-numeric:tabular-nums}
+
+/* Specific flavoring for each total line */
+.total-rev td{
+  background:linear-gradient(90deg, rgba(96,165,250,0.20), rgba(124,183,255,0.12));
+  border-top:2px solid rgba(96,165,250,.65);
+  border-bottom:2px solid rgba(124,183,255,.45);
+}
+.total-exp td{
+  background:linear-gradient(90deg, rgba(245,158,11,0.20), rgba(251,113,133,0.12));
+  border-top:2px solid rgba(245,158,11,.65);
+  border-bottom:2px solid rgba(251,113,133,.45);
+}
+
+/* Net difference row — bold & distinct */
+.net-row td{
+  background:linear-gradient(90deg, rgba(167,139,250,0.25), rgba(96,165,250,0.18));
+  border-top:2px solid rgba(167,139,250,.75);
+  border-bottom:2px solid rgba(96,165,250,.55);
+  font-weight:900;
+}
+
+/* "More" button inside budget cell */
+.more-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  margin-left:8px;padding:6px 10px;border-radius:999px;
+  border:1px solid #263449;background:#1a2332;color:var(--ink);
+  font-size:12px;line-height:1;cursor:pointer;
+  transition:transform .06s ease, background .2s ease;
+}
+.more-btn:hover{background:#213049}
+.more-btn:active{transform:translateY(1px)}
+.more-btn:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+
+/* Hint */
+.hint{color:var(--muted);font-size:13px;margin:10px 4px}
+
+/* PIE */
 .chart-wrap{
   background:var(--card);
-  border:1px solid #1e2630;border-radius:16px;
+  border:1px solid var(--border);
+  border-radius:16px;
   padding:8px;
 }
 svg{width:100%;height:auto;display:block}
-
-/* Legends & hint */
 .legend{display:flex;flex-wrap:wrap;gap:8px;margin:8px 4px 0}
-.badge{
-  display:inline-flex;align-items:center;gap:8px;
-  padding:6px 10px;border-radius:999px;background:#1b2330;color:var(--ink);
-  border:1px solid #223043
-}
 .swatch{width:14px;height:14px;border-radius:4px;display:inline-block}
-.hint{color:var(--muted);font-size:13px;margin:10px 4px}
-
-/* Sankey styling */
-.link{fill:none;stroke-opacity:.35}
-.link:hover{stroke-opacity:.65}
-.node rect{
-  cursor:default;
-  rx:8;ry:8;
-  shape-rendering:geometricPrecision;
-}
-.node.clickable rect{cursor:pointer;outline:2px solid var(--ring)}
-.node text{
-  fill:var(--ink);
-  font-size:13px;
-  text-shadow: 0 1px 0 #000, 0 0 8px #0006;
-}
-
-/* Pie styling */
-.slice{cursor:default}
-.slice.other{cursor:pointer}
-.leader{fill:none;stroke:#7b8ba3;stroke-width:1}
 .label{font-size:13px;fill:var(--ink);pointer-events:none}
-.label-t{font-weight:700}
+.label-t{font-weight:800}
 .label-v{fill:var(--muted)}
+.leader{fill:none;stroke:#90a3c2;stroke-width:1}
 
 .view-header{padding:6px 2px 10px}
 .view-header h2{margin:0 0 4px 0}
 .subhead{color:var(--muted);font-size:14px}
 
-/* Bottom sheet chooser */
-.chooser{
-  position:fixed;inset:0;background:rgba(0,0,0,.45);
-  display:grid;place-items:end center;z-index:20;
+/* MOBILE TUNING */
+@media (max-width: 540px){
+  body{font-size:15px}
+  thead th, tbody td{padding:10px 8px}
+  .col-total{width:44%}
+  .more-btn{padding:5px 9px;font-size:12px}
 }
-.chooser-card{
-  width:100%;max-width:560px;background:var(--card);
-  border-top-left-radius:16px;border-top-right-radius:16px;
-  border:1px solid #223043;border-bottom:0;
-  padding:14px;
-  box-shadow:0 -8px 30px rgba(0,0,0,.5);
-  animation:slideup .18s ease-out;
+@media (max-width: 380px){
+  body{font-size:14px}
+  thead th, tbody td{padding:9px 7px}
+  .col-total{width:48%}
 }
-@keyframes slideup{from{transform:translateY(12px);opacity:.7}to{transform:translateY(0);opacity:1}}
-.chooser-list{list-style:none;margin:10px 0 8px;padding:0;display:grid;gap:8px}
-.chooser-list button{
-  width:100%;text-align:left;padding:12px;border-radius:12px;border:1px solid #223043;
-  background:#18202c;color:var(--ink);cursor:pointer;
-}
-.chooser-list button:active{background:var(--tap)}
 
-@media (min-width:720px){
-  .label{font-size:14px}
-  .node text{font-size:14px}
+/* Tooltip for pie */
+.mb-tip{
+  position:fixed;
+  z-index:1000;
+  pointer-events:none;
+  background:#0f172a;
+  color:var(--ink);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:8px 10px;
+  font-size:13px;
+  box-shadow:0 8px 20px rgba(0,0,0,.35);
+  transform:translateZ(0);
 }
+.mb-tip.hidden{ display:none }
+
+/* Pie center total */
+.pie-center-value{
+  font-weight:900;
+  font-size: clamp(16px, 3.2vw, 24px);
+  fill: var(--ink);
+}
+.pie-center-label{
+  font-weight:700;
+  font-size: clamp(12px, 2.4vw, 14px);
+  fill: var(--muted);
+}
+
+/* Optional: slightly tighten label spacing on big slices */
+.label-big .label-t { font-weight:800 }
+.label-big .label-v { fill: var(--muted) }
+
+/* On-slice text: subtle stroke for readability over color */
+.on-slice-text{
+  paint-order: stroke;
+  stroke: rgba(0,0,0,0.35);
+  stroke-width: 2px;
+}
+
+/* Pie center total */
+.pie-center-value{
+  font-weight:900;
+  font-size: clamp(16px, 3.2vw, 24px);
+  fill: var(--ink);
+}
+.pie-center-label{
+  font-weight:700;
+  font-size: clamp(12px, 2.4vw, 14px);
+  fill: var(--muted);
+}
+
+/* Improve readability of on-slice labels */
+.on-slice text,
+.on-slice-text {
+  font-weight: 800;
+  fill: #fff; /* white text for contrast */
+  text-shadow:
+    -1px -1px 3px rgba(0,0,0,0.7),
+     1px -1px 3px rgba(0,0,0,0.7),
+    -1px  1px 3px rgba(0,0,0,0.7),
+     1px  1px 3px rgba(0,0,0,0.7);
+  paint-order: stroke;
+  stroke: rgba(0,0,0,0.8);
+  stroke-width: 2px;
+}
+
+/* Make value text slightly smaller and muted to separate it visually */
+.on-slice-text.label-v {
+  font-weight: 600;
+  font-size: 0.85em;
+  fill: #f3f4f6; /* lighter gray than pure white */
+}
+
+/* Small external label pill to keep text readable & within bounds */
+.label-box{
+  fill: rgba(6, 11, 19, 0.80);
+  stroke: #263449;
+  stroke-width: 1px;
+}
+
+.label-small .label-t{
+  font-weight: 800;
+  fill: #eaf2ff;
+}
+.label-small .label-v{
+  fill: var(--muted);
+}
+
+/* Make "Other" feel interactive & distinct */
+.slice.other{
+  cursor: pointer;
+  stroke: #a78bfa;            /* violet outline */
+  stroke-width: 2px;
+  filter: drop-shadow(0 0 0 rgba(167,139,250,0)); /* for animation */
+  animation: otherPulse 2.4s ease-in-out infinite;
+}
+@keyframes otherPulse{
+  0%   { filter: drop-shadow(0 0 0 rgba(167,139,250,.0)); }
+  50%  { filter: drop-shadow(0 0 10px rgba(167,139,250,.7)); }
+  100% { filter: drop-shadow(0 0 0 rgba(167,139,250,.0)); }
+}
+
+/* Tooltip hint line */
+.mb-tip .tip-hint{
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--accent-2);
+  opacity: 0.9;
+}
+
+/* Legend cue for Other */
+.legend .badge.other{
+  border: 1px dashed var(--accent-2);
+  border-radius: 8px;
+  padding: 2px 6px;
+}
+.legend .badge.other .badge-hint{
+  color: var(--muted);
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+/* On small screens, hide leader-line labels and make tooltip bigger */
+@media (max-width: 480px) {
+  .label-small,
+  .leader {
+    display: none !important;
+  }
+
+  .mb-tip {
+    font-size: 15px;          /* slightly larger text */
+    padding: 12px 14px;       /* more tap-friendly */
+    border-radius: 14px;      /* softer shape */
+    line-height: 1.35;
+  }
+
+  .mb-tip strong {
+    font-size: 1.05em;        /* emphasize the account name */
+  }
+
+  .mb-tip .tip-hint {
+    font-size: 13px;
+    opacity: 1;               /* stronger hint visibility */
+    display: block;
+    margin-top: 6px;
+  }
+}
+
+.mb-tip { z-index: 9999; }       /* already high, just making sure */
+.mb-tip.hidden { display: none; }/* guarantees it's gone when hidden */
+
+/* Legend layout */
+#legend, .legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px 12px;
+  margin-top: 12px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  /* optional subtle contrast without looking busy */
+  background: rgba(0,0,0,0.03);
+}
+
+.legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.15) inset;
+}
+
+.legend-text {
+  line-height: 1.2;
+  min-width: 0; /* allow text to truncate if needed */
+}
+
+.legend-title {
+  font-weight: 600;
+  font-size: clamp(13px, 1.6vw, 16px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.legend-value {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.9;
+  font-size: clamp(12px, 1.5vw, 14px);
+  white-space: nowrap;
+}
+
+/* Tighten and stack a bit on very small screens */
+@media (max-width: 480px) {
+  #legend, .legend {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px 8px;
+  }
+  .legend-item {
+    padding: 8px 10px;
+  }
+  .legend-title {
+    font-size: clamp(13px, 4vw, 16px);
+  }
+  .legend-value {
+    font-size: clamp(12px, 3.6vw, 15px);
+  }
+}
+
+#pieLegend .badge { cursor: pointer; }
+#pieLegend .badge:focus {
+  outline: 2px solid rgba(99,102,241,0.8);
+  outline-offset: 2px;
+}
+#pieLegend .badge:hover { filter: brightness(0.98); }
