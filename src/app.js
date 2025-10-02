@@ -9,7 +9,7 @@
  */
 
 const DEFAULT_DATA_URL_START = "https://docs.google.com/spreadsheets/d/e/";
-const DEFAULT_DATA_URL = DEFAULT_DATA_URL_START + "2PACX-1vRRtJHPNjRvv_DT0suQ4u-Z4yHKa-cwkkACS-l_QmJrPm7uuAnTUmN7xdwISa7iAEJfuuVrTEjY1xkV/pub?output=tsv";
+const DEFAULT_DATA_URL = DEFAULT_DATA_URL_START + "2PACX-1vRRtJHPNjRvv_DT0suQ4u-Z4yHKa-cwkkACS-l_QmJrPm7uuAnTUmN7xdwISa7iAEJfuuVrTEjY1xkV/pubhtml?gid=948065768&single=true";
 
 // ----------------------------------------------
 // Helpers
