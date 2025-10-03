@@ -7,8 +7,6 @@
     content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"
   />
   <title>City of Moody Budget</title>
-
-  <!-- D3 -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 
   <link rel="stylesheet" href="./assets/css/style.css" />
@@ -16,13 +14,13 @@
 <body>
   <header class="app-header">
     <h1 class="app-title">City of Moody Budget</h1>
-    <div class="controls">
+    <div class="top-controls">
       <button id="backBtn" class="btn hidden" aria-label="Back">← Back</button>
     </div>
   </header>
 
   <main class="app-main">
-    <!-- Table view -->
+    <!-- Budget Table -->
     <section id="tableView" class="view">
       <div class="table-wrap">
         <table id="budgetTable" class="table">
@@ -35,7 +33,7 @@
           <tbody id="tableBody"></tbody>
         </table>
       </div>
-      <div class="hint">Use "More" button to drill down to pie chart</div>
+      <div class="hint">Use "More" buttons to drill down to pie chart</div>
     </section>
 
     <!-- Pie view (replaces table when active) -->
