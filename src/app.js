@@ -1,4 +1,16 @@
 /* City of Moody Budget
+   This application showcases the city budget in two parts. The first part is a simple
+   table that mimics the City of Moody budget overview from the Finance Committee. Then each
+   Budget at that level can be "drilled down" to pie charts. The organization is assumed
+   from the budget spreadsheets, which were flattened to a Google spreadsheet for simplicity.
+   Each amount is organized hierarchically into "Type" (Revenue, Expense or Less), "Budget" (i.e.
+   Operating Budgets, Capital Budgets, etc.), Department (Police Department, Library) - optional,
+   and Account. In order for the pie chart to show, there must be a department and account.
+   Otherwise, it will only show on the table with no "More" button.
+
+   Some code was generated with Chat GPT, which I am regretting more and more.
+
+   Copyright Dan Roberts <danroberts728@gmail.com>
  */
 
 /* Constants */
@@ -25,6 +37,7 @@ const backBtn = d3.select("#backBtn");
 const fmt_whole_number = d3.format(",.0f");
 const fmt_one_decimal = d3.format(".1f");
 const fmt_dollars = x => `$${fmt_whole_number(x)}`;
+const fmt_pct = x => `${fmt_one_decimal(x*100)}%`;
 
 /* Tooltip and methods */
 const tip = d3.select("body").append("div")
@@ -40,10 +53,11 @@ function hideTip() {
     tip.classed("hidden", true).style("left", "-9999px").style("top", "-9999px");
 }
 
-// For showing the "More" button (count > 1)
-let revBudgetToAccounts = new Map();
-let expBudgetToAccounts = new Map();
-let lessBudgetToAccounts = new Map();
+/* Top-level, table rows (Budgets). Don't love globals here,
+but they make sense here if anywhere */
+let revenueBudgets = new Map();
+let expenseBudgets = new Map();
+let lessBudgets = new Map();
 
 // For responsive re-render of the current pie
 let lastPieState = null; // { allItems, opts, header }
@@ -86,10 +100,10 @@ async function init() {
         expRows = rawRows.filter(r => normType(r.Type) === "EXPENSE" && r.Budget && r.Approved > 0);
         lessRows = rawRows.filter(r => normType(r.Type) === "LESS" && r.Budget && r.Approved > 0);
 
-        // Build Budget -> Accounts list (for >1 check)
-        revBudgetToAccounts = buildBudgetAccounts(revRows);
-        expBudgetToAccounts = buildBudgetAccounts(expRows);
-        lessBudgetToAccounts = buildBudgetAccounts(lessRows);
+        // Build Budgets for table
+        revenueBudgets = buildBudgetAccounts(revRows);
+        expenseBudgets = buildBudgetAccounts(expRows);
+        lessBudgets = buildBudgetAccounts(lessRows);
 
         renderBudgetTable(revRows, expRows, lessRows);
 
@@ -388,7 +402,7 @@ function renderBudgetTable(revRows, expRows, lessRows) {
     };
 
     // Renders: Revenues → Total Revenues
-    appendRows(revAgg, revBudgetToAccounts, "Revenues");
+    appendRows(revAgg, revenueBudgets, "Revenues");
     tableBody.append("tr").attr("class", "total-row total-rev")
         .html(`
       <td class="col-budget label">Total Revenues</td>
@@ -396,7 +410,7 @@ function renderBudgetTable(revRows, expRows, lessRows) {
     `);
 
     // Expenses → Total Expenses
-    appendRows(expAgg, expBudgetToAccounts, "Expenses");
+    appendRows(expAgg, expenseBudgets, "Expenses");
     tableBody.append("tr").attr("class", "total-row total-exp")
         .html(`
       <td class="col-budget label">Total Expenses</td>
@@ -404,7 +418,7 @@ function renderBudgetTable(revRows, expRows, lessRows) {
     `);
 
     // LESS (no section total)
-    appendRows(lessAgg, lessBudgetToAccounts, "LESS");
+    appendRows(lessAgg, lessBudgets, "LESS");
 
     // Net Difference (Revenues - Expenses - LESS)
     tableBody.append("tr").attr("class", "net-row total-row")
@@ -803,7 +817,10 @@ function renderPie(allItems, {
     <span class="swatch" style="${swatchStyle}"></span>
     <div class="btxt">
       <div class="btitle">${it.account}${isOther ? ' <span class="badge-hint">(expand)</span>' : ''}</div>
-      <div class="bval">${fmt_dollars(it.value)}</div>
+      <div class="bdata">
+        <div class="bval">${fmt_dollars(it.value)}</div>
+        <div class="bpct">${fmt_pct(it.value/denom)}</div>
+      </div>
     </div>
   `);
 

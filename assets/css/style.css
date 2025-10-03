@@ -280,7 +280,7 @@ svg{width:100%;height:auto;display:block}
 
 /* Legend cue for Other */
 .legend .badge.other{
-  border: 1px dashed var(--accent-2);
+  border: 1px dashed var(--accent-2) !important;
   border-radius: 8px;
   padding: 2px 6px;
 }
@@ -382,9 +382,27 @@ svg{width:100%;height:auto;display:block}
   }
 }
 
-#pieLegend .badge { cursor: pointer; }
+#pieLegend .badge { 
+  padding: 2px 6px;
+  border: 1px solid #cccccc33;
+  border-radius: 8px;
+  cursor: pointer; 
+}
 #pieLegend .badge:focus {
   outline: 2px solid rgba(99,102,241,0.8);
   outline-offset: 2px;
 }
 #pieLegend .badge:hover { filter: brightness(0.98); }
+
+.bdata {
+  width: 100%;
+  float: left;
+}
+.bval {
+  float: left;
+  position: relative;
+}
+.bpct {
+  float: right;
+  position: relative;
+}
