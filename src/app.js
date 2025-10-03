@@ -40,11 +40,6 @@ function hideTip() {
     tip.classed("hidden", true).style("left", "-9999px").style("top", "-9999px");
 }
 
-
-let revRows = [];
-let expRows = [];
-let lessRows = [];
-
 // For showing the "More" button (count > 1)
 let revBudgetToAccounts = new Map();
 let expBudgetToAccounts = new Map();
@@ -58,6 +53,10 @@ init();
 
 async function init() {
     let rawRows = [];
+    let revRows = [];
+    let expRows = [];
+    let lessRows = [];
+
     try {
         const rawTsv = await fetch(TSV_URL).then(r => r.text());
         const parsed = d3.tsvParse(rawTsv);
@@ -92,7 +91,7 @@ async function init() {
         expBudgetToAccounts = buildBudgetAccounts(expRows);
         lessBudgetToAccounts = buildBudgetAccounts(lessRows);
 
-        renderBudgetTable();
+        renderBudgetTable(revRows, expRows, lessRows);
 
         backBtn.on("click", () => {
             hideTip();
@@ -328,7 +327,7 @@ function resolveOverlaps(nodes, minY, maxY, pad = 6) {
 }
 
 /* ===== Table ===== */
-function renderBudgetTable() {
+function renderBudgetTable(revRows, expRows, lessRows) {
     tableBody.selectAll("*").remove();
 
     const groupByBudget = rows => {
@@ -359,6 +358,14 @@ function renderBudgetTable() {
             const accounts = accountsMap.get(row.budget) || [];
             const showMore = accounts.length > 1;
 
+            let baseRows;
+            if(sectionLabel === "Revenues")
+                baseRows = revRows;
+            else if (sectionLabel === "Expenses")
+                baseRows = expRows;
+            else   
+                baseRows = lessRows;
+
             const tr = tableBody.append("tr");
 
             // Budget cell (with optional More button)
@@ -371,7 +378,7 @@ function renderBudgetTable() {
                     .text("More ▸")
                     .on("click", (e) => {
                         e.stopPropagation();
-                        showDeptPieForBudget(sectionLabel, row.budget);
+                        showDeptPieForBudget(sectionLabel, row.budget, baseRows);
                     });
             }
 
@@ -408,10 +415,7 @@ function renderBudgetTable() {
 }
 
 /* ===== Pie: Dept (per budget) -> Accounts (dept+budget) ===== */
-function showDeptPieForBudget(sectionLabel, budgetName) {
-    const baseRows =
-        sectionLabel === "Revenues" ? revRows :
-            sectionLabel === "Expenses" ? expRows : lessRows;
+function showDeptPieForBudget(sectionLabel, budgetName, baseRows) {
 
     // rows for this budget
     const rows = baseRows.filter(r => r.Budget === budgetName && r.Approved > 0);
@@ -450,7 +454,7 @@ function showDeptPieForBudget(sectionLabel, budgetName) {
             rootLabel: `${budgetName} total`,
             onSliceClick: (d) => {
                 const dept = d.data.account;
-                showAccountsPieForDeptBudget(sectionLabel, budgetName, dept);
+                showAccountsPieForDeptBudget(sectionLabel, budgetName, dept, baseRows);
             }
         },
         {
@@ -460,11 +464,7 @@ function showDeptPieForBudget(sectionLabel, budgetName) {
     );
 }
 
-function showAccountsPieForDeptBudget(sectionLabel, budgetName, dept) {
-    const baseRows =
-        sectionLabel === "Revenues" ? revRows :
-            sectionLabel === "Expenses" ? expRows : lessRows;
-
+function showAccountsPieForDeptBudget(sectionLabel, budgetName, dept, baseRows) {
     // Filter to this budget+dept
     const rows = baseRows.filter(r =>
         r.Budget === budgetName &&
